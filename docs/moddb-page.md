@@ -49,7 +49,7 @@ the cells holding the wheel up. The wheel is consuming its own fuel.
 For the rapids that worldgen places, the loss cannot heal. Liquid spreading will neither raise a
 cell back to source level nor drain one, so those blocks never come back.
 
-Vertical falls suffer worst. A wheel fed by falling water rewrites the very cell it just counted.
+Vertical falls suffer worst. A wheel fed by falling water rewrites the very cell it has counted.
 
 **What Ingenium does.** The wheel stops writing to the world. Nothing else about how it measures
 flow changes.
