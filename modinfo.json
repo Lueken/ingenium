@@ -4,7 +4,7 @@
   "name": "Ingenium",
   "authors": ["Venah"],
   "description": "Mechanical power, corrected. Vanilla-only fixes to Vintage Story's water wheels and mechanical network, with no third-party dependencies.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "side": "Universal",
   "dependencies": {
     "game": "1.22.0"

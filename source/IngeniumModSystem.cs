@@ -4,7 +4,7 @@ using Vintagestory.API.Common;
 [assembly: ModInfo("Ingenium", "ingenium",
     Authors = new string[] { "Venah" },
     Description = "Mechanical power, corrected.",
-    Version = "0.1.0")]
+    Version = "0.2.0")]
 
 namespace Ingenium;
 
@@ -65,9 +65,9 @@ public class IngeniumModSystem : ModSystem
         foreach (var m in harmony.GetPatchedMethods()) { api.Logger.Notification("[Ingenium] Patched: " + m.DeclaringType?.Name + "." + m.Name); n++; }
 
         if (n == 0 && Config.preserveRapids)
-            api.Logger.Warning("[Ingenium] 0.1.0 loaded but patched NOTHING. Expected at least ReplaceRapidWater.");
+            api.Logger.Warning($"[Ingenium] {Mod.Info.Version} loaded but patched NOTHING. Expected ReplaceRapidWater at minimum.");
         else
-            api.Logger.Notification($"[Ingenium] 0.1.0 active, {n} method(s) patched. preserveRapids={Config.preserveRapids} debugLogging={Config.debugLogging}");
+            api.Logger.Notification($"[Ingenium] {Mod.Info.Version} active, {n} method(s) patched. preserveRapids={Config.preserveRapids} freeFloatingWheels={Config.freeFloatingWheels} debugLogging={Config.debugLogging}");
 
         // Periodic totals, server side only. A fix that removes a world write has no visible
         // artifact, so the running count is the evidence that it is doing anything at all.
@@ -81,11 +81,23 @@ public class IngeniumModSystem : ModSystem
                     api.Logger.Notification($"[Ingenium] rapids preserved: {n2} total (+{n2 - lastReported} since last report)");
                     lastReported = n2;
                 }
+
+                // Nonzero means a mirrored wheel exists and was fighting its neighbours. Reported
+                // once rather than per tick, because this fires on every GetTorque call for every
+                // affected wheel and would otherwise be thousands of lines a minute.
+                long n3 = Patches.WaterWheelTorqueSignPatch.Corrected;
+                if (n3 > 0 && !reportedAxisCorrection)
+                {
+                    reportedAxisCorrection = true;
+                    api.Logger.Notification("[Ingenium] axis correction is active: at least one water wheel was built on the "
+                        + "mirrored side variant and was subtracting torque from its network. It now adds.");
+                }
             }, 60000);
         }
     }
 
     private long lastReported;
+    private bool reportedAxisCorrection;
 
     public override void Dispose()
     {
@@ -102,6 +114,12 @@ public class IngeniumConfig
     /// <summary>Stop water wheels from converting the rapids that power them into ordinary water.
     /// See WaterWheelRapidsPatch for what the base game does and why it matters.</summary>
     public bool preserveRapids { get; set; } = true;
+
+    /// <summary>Make a water wheel's spin depend on the water rather than on which mirror variant
+    /// happened to be placed. Wheels on one shaft in one current then add instead of cancelling, and
+    /// they turn the way the water pushes them. Genuinely opposing currents still oppose.
+    /// See WaterWheelAxisPatch.</summary>
+    public bool freeFloatingWheels { get; set; } = true;
 
     /// <summary>Verbose logging, on by default. These fixes remove world writes rather than adding
     /// anything visible, so without a record of what did not happen there is no way to tell a
