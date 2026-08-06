@@ -109,33 +109,53 @@ public static class WaterWheelTorqueSignPatch
     }
 }
 
-/// <summary>Render half: makes the correction visible.
+/// <summary>Render half: the water wheel double-counts its own direction.
 ///
-/// Without this the torque fix is invisible and a corrected wheel keeps spinning backwards while
-/// quietly pulling its weight, which is a worse outcome than a visible fault because nobody can tell
-/// a working fix from a broken one.
+/// Every other mechanical block renders <c>s(propagationDir) * networkAngle</c>. That is what keeps
+/// a straight shaft coherent: <c>propagationDir</c> propagates along the run, so every node on it
+/// agrees. The water wheel alone multiplies by <c>dir</c> on top:
 ///
-/// The rendered sense reduces to <c>s(facing) * sign(network.Speed)</c>: the <c>* dir</c> factor in
-/// <c>AngleRad</c> cancels exactly against <c>IsRotationReversed(propagationDir)</c>, so contrary to
-/// how it reads, <c>* dir</c> does NOT make the render follow the water. Every node on a network
-/// shares <c>sign(network.Speed)</c>, so the only term that can differ between two wheels on one
-/// shaft is <c>s(facing)</c>. Multiplying by the axis polarity cancels precisely that term.
+/// <code>public override float AngleRad => base.AngleRad * dir;</code>
 ///
-/// A useful consequence, and the reason this half is worth having on its own: a wheel that visibly
-/// spins against its network-mates is necessarily the one subtracting torque. The visual becomes a
-/// reliable diagnostic with no tooltip needed.</summary>
+/// But <c>propagationDir</c> ALREADY encodes <c>dir</c>. <c>CheckWater</c> sets it to
+/// <c>dir &lt; 0 ? facing.Opposite : facing</c>, so <c>s(propagationDir) = s(facing) * sign(dir)</c>
+/// and the extra factor makes the wheel render <c>s(facing)</c> while the axle bolted through it
+/// renders <c>s(facing) * sign(dir)</c>. Whenever <c>dir</c> is negative the wheel and its own axle
+/// turn opposite ways on screen, in unmodified vanilla.
+///
+/// The first version of this patch negated one wheel of a mirrored pair so the two wheels agreed.
+/// That fixed wheel to wheel and left wheel to axle broken, which is how the double-count was found:
+/// the wheels lined up and the axles through them did not.
+///
+/// Cancelling the factor instead gives the wheel the same render rule as every other block, and all
+/// three consistencies fall out at once. Wheel matches its axle, because both are now
+/// <c>s(propagationDir)</c>. Mirrored wheels match each other, because <c>propagationDir</c> is
+/// already identical for both: a pair in one current gets opposite <c>facing</c> AND opposite
+/// <c>dir</c>, and the two inversions cancel inside <c>dir &lt; 0 ? facing.Opposite : facing</c>.
+/// And the rotation follows the water, because <c>propagationDir</c> tracks <c>dir</c>, which is
+/// derived from the flow.
+///
+/// Note this is a separate root from the torque half. Torque breaks on
+/// <c>OutFacingForNetworkDiscovery</c>, which does differ between mirrored wheels. Render breaks on
+/// the redundant <c>dir</c>. Two defects, two fixes, one symptom.</summary>
 [HarmonyPatch(typeof(BEBehaviorMPWaterWheel), "AngleRad", MethodType.Getter)]
 public static class WaterWheelRenderSensePatch
 {
     public static bool Prepare() => IngeniumModSystem.Config.freeFloatingWheels;
 
+    private static readonly AccessTools.FieldRef<BEBehaviorMPWaterWheel, float> Dir =
+        AccessTools.FieldRefAccess<BEBehaviorMPWaterWheel, float>("dir");
+
     public static void Postfix(BEBehaviorMPWaterWheel __instance, ref float __result)
     {
-        BlockFacing facing = WheelAxis.Facing(__instance);
-        if (facing == null || WheelAxis.Polarity(facing) >= 0) return;
+        float dir = Dir(__instance);
 
-        // Negating the angle reverses the rendered rotation. This is the same device vanilla already
-        // uses: `* dir` produces negative angles routinely, so the renderer handles them.
-        __result = -__result;
+        // Zero means the wheel has never resolved a flow direction. Leave vanilla's value alone
+        // rather than zeroing the angle and freezing the model.
+        if (dir == 0f) return;
+
+        // dir is +1 or -1, so multiplying by it a second time cancels the factor and leaves
+        // base.AngleRad, which is the rule every other mechanical block already follows.
+        __result *= dir;
     }
 }

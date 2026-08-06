@@ -4,7 +4,7 @@ using Vintagestory.API.Common;
 [assembly: ModInfo("Ingenium", "ingenium",
     Authors = new string[] { "Venah" },
     Description = "Mechanical power, corrected.",
-    Version = "0.2.0")]
+    Version = "0.2.1")]
 
 namespace Ingenium;
 

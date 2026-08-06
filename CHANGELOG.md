@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+### Fixed
+- Water wheels and the axles through them now turn the same way. The wheel was double counting its
+  own direction: every other mechanical block renders `s(propagationDir) * networkAngle`, and
+  `propagationDir` already encodes the flow direction, but the wheel multiplied by `dir` a second
+  time on top of it. In unmodified vanilla this makes a wheel spin opposite to its own axle whenever
+  `dir` is negative.
+
 ## 0.2.0
 
 ### Fixed
