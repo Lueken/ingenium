@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>bin\$(Configuration)\Mods\ingenium</OutputPath>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Ingenium</AssemblyName>
+    <RootNamespace>Ingenium</RootNamespace>
+  </PropertyGroup>
+
+  <!-- VINTAGE_STORY must point at a 1.22.x install. Any 1.22.x will do for this mod: the
+       mechanical classes it patches were verified byte-identical between 1.22.3 and 1.22.5. -->
+  <ItemGroup>
+    <Reference Include="VintagestoryAPI">
+      <HintPath>$(VINTAGE_STORY)/VintagestoryAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VSSurvivalMod">
+      <HintPath>$(VINTAGE_STORY)/Mods/VSSurvivalMod.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(VINTAGE_STORY)/Lib/Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(VINTAGE_STORY)/Lib/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="modinfo.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
