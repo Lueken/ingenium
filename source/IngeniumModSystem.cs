@@ -67,8 +67,25 @@ public class IngeniumModSystem : ModSystem
         if (n == 0 && Config.preserveRapids)
             api.Logger.Warning("[Ingenium] 0.1.0 loaded but patched NOTHING. Expected at least ReplaceRapidWater.");
         else
-            api.Logger.Notification($"[Ingenium] 0.1.0 active, {n} method(s) patched. preserveRapids={Config.preserveRapids}");
+            api.Logger.Notification($"[Ingenium] 0.1.0 active, {n} method(s) patched. preserveRapids={Config.preserveRapids} debugLogging={Config.debugLogging}");
+
+        // Periodic totals, server side only. A fix that removes a world write has no visible
+        // artifact, so the running count is the evidence that it is doing anything at all.
+        if (api.Side == EnumAppSide.Server && Config.debugLogging)
+        {
+            api.Event.RegisterGameTickListener(_ =>
+            {
+                long n2 = Patches.WaterWheelRapidsPatch.Preserved;
+                if (n2 > lastReported)
+                {
+                    api.Logger.Notification($"[Ingenium] rapids preserved: {n2} total (+{n2 - lastReported} since last report)");
+                    lastReported = n2;
+                }
+            }, 60000);
+        }
     }
+
+    private long lastReported;
 
     public override void Dispose()
     {
@@ -85,4 +102,9 @@ public class IngeniumConfig
     /// <summary>Stop water wheels from converting the rapids that power them into ordinary water.
     /// See WaterWheelRapidsPatch for what the base game does and why it matters.</summary>
     public bool preserveRapids { get; set; } = true;
+
+    /// <summary>Verbose logging, on by default. These fixes remove world writes rather than adding
+    /// anything visible, so without a record of what did not happen there is no way to tell a
+    /// working fix from a fix that never attached.</summary>
+    public bool debugLogging { get; set; } = true;
 }

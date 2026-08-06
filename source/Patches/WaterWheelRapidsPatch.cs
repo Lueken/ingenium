@@ -57,21 +57,47 @@ public static class WaterWheelRapidsPatch
 {
     public static bool Prepare() => IngeniumModSystem.Config.preserveRapids;
 
+    /// <summary>How many conversions this patch has actually prevented. The count is the whole
+    /// point: the fix removes a world write, so the only positive evidence it is working is a
+    /// record of the writes that did not happen.</summary>
+    public static long Preserved;
+
+    private static int loggedInDetail;
+    private const int DetailLimit = 20;
+
     /// <summary>Returns false to skip the original entirely.</summary>
     public static bool Prefix(BlockPos pos, ref bool __result, BEBehaviorMPWaterWheel __instance)
     {
         // Fail open. If anything about the world is not readable, let vanilla run rather than
         // silently changing the caller's control flow.
-        var accessor = __instance?.Api?.World?.BlockAccessor;
+        var api = __instance?.Api;
+        var accessor = api?.World?.BlockAccessor;
         if (accessor == null || pos == null) return true;
 
         // Layer 2 is the fluid layer, the same one the original reads and writes.
         Block block = accessor.GetBlock(pos, 2);
         if (block == null) return true;
 
+        var liquid = block.GetBehavior<BlockBehaviorFiniteSpreadingLiquid>();
+
         // Exactly the original's return condition, minus the SetBlock in its inner branch.
-        __result = block.GetBehavior<BlockBehaviorFiniteSpreadingLiquid>() != null
-                   && block.LiquidCode == "water";
+        __result = liquid != null && block.LiquidCode == "water";
+
+        // Vanilla's own inner guard. This is the branch that would have written, so it is the only
+        // branch worth counting: ordinary water reaches here constantly and is never converted.
+        if (__result && !liquid!.multiplySpread)
+        {
+            Preserved++;
+            if (IngeniumModSystem.Config.debugLogging && loggedInDetail < DetailLimit)
+            {
+                loggedInDetail++;
+                api!.Logger.Notification(
+                    $"[Ingenium] preserved rapids at {pos.X}, {pos.Y}, {pos.Z} ({block.Code}) "
+                    + $"for the wheel at {__instance!.Pos}. total={Preserved}"
+                    + (loggedInDetail == DetailLimit ? "  (further detail lines suppressed, periodic totals continue)" : ""));
+            }
+        }
+
         return false;
     }
 }
