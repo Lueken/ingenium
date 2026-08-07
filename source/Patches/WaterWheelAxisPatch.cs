@@ -6,156 +6,181 @@ using Vintagestory.GameContent.Mechanics;
 namespace Ingenium.Patches;
 
 /// <summary>
-/// A water wheel should be a free floating gear. The water decides which way it turns.
+/// A water wheel is a free floating gear: the water decides which way it turns, the shaft follows
+/// rigidly, and which mirror variant was placed is cosmetic.
 ///
-/// THE DEFECT. A wheel's <c>side</c> variant fixes an axle AXIS, which is physical and must keep
-/// mattering: a wheel whose axle lies along the current cannot be driven by it. But the variant also
-/// fixes an axis POLARITY, and vanilla hangs three separate things off that polarity:
+/// Design D, adopted 2026-08-07 after an adversarially verified review of two failed attempts
+/// (eng-overheat-research/04-waterwheel-review-021.md in the owner's project records). The lesson
+/// both failures taught: vanilla routes the water's direction through THREE couplings at once, the
+/// propagationDir rewrite in CheckWater, the torque sign in GetTorque, and the render factor in
+/// AngleRad. Correcting any one of them in isolation moves the defect instead of removing it.
+/// Attempt one (negate mirrored renders) made wheels agree with each other and disagree with their
+/// axles. Attempt two (delete the render factor as a supposed double count) made the whole assembly
+/// rigid and indifferent to the water, because the two remaining factors each track the water and
+/// an even number of water-tracking factors is a constant.
 ///
-///   1. the sensing tangent, <c>num2 += (r_hat x n_hat) . pushVector</c> with <c>n_hat = facing.Normalf</c>
-///   2. the torque sign, <c>num = (propagationDir == OutFacingForNetworkDiscovery) ? 1 : -1</c>,
-///      and a water wheel's <c>OutFacingForNetworkDiscovery</c> IS its <c>facing</c>
-///   3. the rendered spin, via <c>AngleRad => base.AngleRad * dir</c> and <c>IsRotationReversed</c>
+/// Design D collapses the three couplings to ONE. The wheel becomes a standard mechanical node,
+/// exactly like a windmill:
 ///
-/// Place the mirror variant and all three flip. Two wheels on one shaft, in one current, then
-/// compute equal and opposite torque and cancel.
+///   1. Its propagationDir is frozen at the value network topology gives it. CheckWater's
+///      water-driven rewrite is suppressed (PdFreeze below).
+///   2. The water enters the system in one place only: the torque sign. When dir is negative the
+///      wheel's frame is swapped for the duration of GetTorque (TorqueSign below), so the wheel
+///      pushes the network toward the water's direction, for either mirror variant, and the
+///      back-driven test means what it should: physical rotation opposing this wheel's water.
+///   3. The render is the plain shaft angle (Render below). Direction reaches the wheel the same
+///      way it reaches every axle, through the network's signed speed.
 ///
-/// This is not an exotic build. <c>BlockWindmillRotor.GetFacingForPlacement</c> writes
-/// <c>CodeWithVariant("side", val.Opposite.Code)</c> whenever a wheel is placed against an existing
-/// mechanical connector, so attaching wheels to a shaft from both ends FORCES the mirror. Building
-/// both wheels before the axle avoids it, which is why some banks work and others do not, and why
-/// the difference looks like superstition.
+/// Proven across all eight facing x dir x NetworkDir cases in the review: the wheel renders
+/// s(facing) * dir, the with-water sign, and it evaluates the IDENTICAL expression as its axle, so
+/// wheel-with-water and wheel-rigid-with-axle both hold by construction, through every transient,
+/// back-driving included. Genuinely opposing currents produce opposite torque and still fight.
 ///
-/// THE FIX. Canonicalise the axis. Every <c>BlockFacing</c> axis has two members; one has a positive
-/// normal. Treat that one as the reference. A wheel whose <c>facing</c> is the other member has its
-/// whole frame inverted relative to the reference, so its torque sign must be inverted back.
-///
-/// WHY THIS PATCHES propagationDir RATHER THAN THE RESULT. Correcting the returned float would be a
-/// one-liner and would be wrong. Line 86's <c>num</c> feeds <c>flag = num * speed &lt; 0</c>, the
-/// back-driven test, and <c>flag</c> selects BOTH the resistance term and the magnitude:
-///
-/// <code>
-/// resistance = flag ? Resistance * TorqueFactor * Min(0.8, |speed| * 400)
-///                   : (num3 > 0 ? Resistance * Min(0.2, num3 * num3 * 80) : 0);
-/// double val = flag ? capableSpeed : (capableSpeed - |speed|);
-/// </code>
-///
-/// A mirrored wheel takes the back-driven branch, which returns the FULL <c>capableSpeed</c> rather
-/// than the reduced forward value. Flipping only the sign afterward would leave that wheel
-/// contributing roughly three times the torque it should at typical speeds, carrying the wrong drag
-/// with it. Swapping <c>propagationDir</c> for the duration of the call instead makes the entire
-/// method compute consistently: right branch, right magnitude, right resistance, right sign.
-///
-/// The swap is restored in the postfix, so nothing outside this call ever observes it and network
-/// topology is untouched.
-///
-/// WHAT THIS DOES NOT BREAK. Genuine opposition still opposes. Two wheels in genuinely opposing
-/// currents produce opposite <c>dir</c> against the SAME canonical axis, so they still fight, which
-/// is correct. Only the spurious opposition, the kind caused purely by which mirror you placed, is
-/// removed.
+/// Accepted behaviour change, deliberate: suppressing the pd rewrite removes vanilla's instant
+/// TurnDir flip on water reversal. A reversal is now a physical event, the network decelerates
+/// through zero over a few seconds and re-settles with the water, with a sub-second client freeze
+/// at the crossing. That is the free floating gear behaving like a thing with load, not a bug.
 /// </summary>
 public static class WheelAxis
 {
-    /// <summary>+1 if this facing is the positive-normal member of its axis, -1 otherwise. Derived
-    /// from the normal rather than from a hardcoded list of facings, so it cannot drift out of step
-    /// with the engine's own axis conventions.</summary>
-    public static int Polarity(BlockFacing f)
-    {
-        Vec3i n = f.Normali;
-        return (n.X + n.Y + n.Z) > 0 ? 1 : -1;
-    }
-
     public static readonly AccessTools.FieldRef<BEBehaviorMPWaterWheel, BlockFacing> Facing =
         AccessTools.FieldRefAccess<BEBehaviorMPWaterWheel, BlockFacing>("facing");
 
+    public static readonly AccessTools.FieldRef<BEBehaviorMPWaterWheel, float> Dir =
+        AccessTools.FieldRefAccess<BEBehaviorMPWaterWheel, float>("dir");
+
     public static readonly AccessTools.FieldRef<BEBehaviorMPBase, BlockFacing> PropagationDir =
         AccessTools.FieldRefAccess<BEBehaviorMPBase, BlockFacing>("propagationDir");
+
+    public static readonly AccessTools.FieldRef<BEBehaviorMPBase, float> LastKnownAngleRad =
+        AccessTools.FieldRefAccess<BEBehaviorMPBase, float>("lastKnownAngleRad");
+
+    public static readonly AccessTools.FieldRef<MechPowerPath, BlockPos> FromPos =
+        AccessTools.FieldRefAccess<MechPowerPath, BlockPos>("fromPos");
 }
 
-/// <summary>Torque half: makes wheels on one shaft in one current add rather than cancel.</summary>
+/// <summary>Marks the wheel currently executing CheckWater on this thread, so the pd freeze can
+/// tell CheckWater's self-write apart from legitimate topology writes with zero ambiguity. The
+/// review's simpler fromPos-only discriminator has a hole on closed gear loops, where a
+/// wheel-originated discovery path can return to the wheel carrying its own position; requiring
+/// BOTH conditions (inside this wheel's CheckWater AND fromPos is the wheel itself) closes it.
+/// ThreadStatic because client and server tick on different threads in singleplayer.</summary>
+[HarmonyPatch(typeof(BEBehaviorMPWaterWheel), "CheckWater")]
+public static class WaterWheelCheckWaterMarker
+{
+    public static bool Prepare() => IngeniumModSystem.Config.freeFloatingWheels;
+
+    [ThreadStatic] public static BEBehaviorMPWaterWheel? Current;
+
+    public static void Prefix(BEBehaviorMPWaterWheel __instance) => Current = __instance;
+
+    public static void Finalizer() => Current = null;
+}
+
+/// <summary>Patch 1: the pd freeze. The wheel keeps the propagationDir topology gave it, like
+/// every other mechanical block. Suppresses only the one write CheckWater makes about itself;
+/// discovery, rebuilds and merges all pass through untouched. Side benefit, verified in review:
+/// this also stops CheckWater resetting the wheel's GearedRatio to 1 every time the water flips,
+/// a live vanilla defect on geared networks.</summary>
+[HarmonyPatch(typeof(BEBehaviorMPBase), nameof(BEBehaviorMPBase.SetPropagationDirection))]
+public static class WaterWheelPdFreezePatch
+{
+    public static bool Prepare() => IngeniumModSystem.Config.freeFloatingWheels;
+
+    /// <summary>Suppressed self-writes. Expect roughly one per wheel per flow change, not per
+    /// tick: CheckWater only calls SetPropagationDirection when dir CHANGES.</summary>
+    public static long Suppressed;
+
+    public static bool Prefix(BEBehaviorMPBase __instance, MechPowerPath path)
+    {
+        if (__instance is not BEBehaviorMPWaterWheel wheel) return true;
+        if (!ReferenceEquals(WaterWheelCheckWaterMarker.Current, wheel)) return true;
+
+        BlockPos? from = path == null ? null : WheelAxis.FromPos(path);
+        if (from == null || !from.Equals(wheel.Pos)) return true;
+
+        Suppressed++;
+        return false;
+    }
+}
+
+/// <summary>Patch 2: the water enters through torque, and only torque.
+///
+/// Vanilla's GetTorque signs its result by num = (propagationDir == OutFacingForNetworkDiscovery),
+/// a frame test. With pd frozen at topology, the water's direction must be folded in here: when
+/// dir is negative, swap the frame for the duration of the call. Effective torque sign becomes
+/// frame * sign(dir), which for a mirrored pair in one current is identical (their frames and
+/// their dirs both flip, the product does not), so coaxial wheels add for any variant mix, and
+/// wheels in genuinely opposing currents get opposite signs and fight, as they should.
+///
+/// The swap must be the frame and not the returned float, for the same reason as ever: num feeds
+/// the back-driven test (num * speed &lt; 0), which selects BOTH the resistance branch and the
+/// magnitude. Swapping the frame makes the whole method consistent; negating the result would hand
+/// a back-driven wheel roughly three times its correct torque with the wrong drag.
+///
+/// This replaces the 0.2.1 polarity-gated swap entirely. The polarity gate was anchored to the
+/// block variant rather than to the water, which regressed all-mirrored banks that vanilla handled
+/// correctly. dir &lt; 0 is the water-anchored condition. Restore lives in a Finalizer so a foreign
+/// patch throwing mid-call can never leave the frame flipped.</summary>
 [HarmonyPatch(typeof(BEBehaviorMPRotor), nameof(BEBehaviorMPRotor.GetTorque))]
 public static class WaterWheelTorqueSignPatch
 {
     public static bool Prepare() => IngeniumModSystem.Config.freeFloatingWheels;
 
-    /// <summary>Count of calls whose frame was corrected. Nonzero means at least one mirrored wheel
-    /// exists somewhere in the world and was fighting its neighbours.</summary>
-    public static long Corrected;
+    /// <summary>Calls where the frame was swapped. This is NORMAL reversed-flow operation, not a
+    /// defect signal: any wheel whose water pushes opposite its canonical frame swaps on every
+    /// call. Diagnostic only.</summary>
+    public static long ReversedFlowCalls;
 
     public static void Prefix(BEBehaviorMPRotor __instance, out BlockFacing? __state)
     {
         __state = null;
 
-        // Windmills, the creative rotor and Millwright's enhanced rotor all reach this method.
-        // None of them are driven by a directional fluid, and their spin genuinely IS determined by
-        // how they are mounted. Leave them entirely alone.
+        // Windmills, the creative rotor and Millwright's rotors also execute this method. None are
+        // driven by a directional fluid; their spin genuinely is mounting-determined. Untouched.
         if (__instance is not BEBehaviorMPWaterWheel wheel) return;
 
-        BlockFacing facing = WheelAxis.Facing(wheel);
-        if (facing == null || WheelAxis.Polarity(facing) >= 0) return;
+        // dir == 0 (no water, or the pre-first-CheckWater window) needs no case: flowRate is 0, so
+        // TorqueFactor is 0 and the method returns 0 regardless of frame.
+        if (WheelAxis.Dir(wheel) >= 0f) return;
 
         ref BlockFacing pd = ref WheelAxis.PropagationDir(__instance);
         if (pd == null) return;
 
+        // Off-axis pd (possible pre-discovery): the frame test fails both ways, the swap would be
+        // a silent no-op. Skip it so the counter stays honest.
+        BlockFacing facing = WheelAxis.Facing(wheel);
+        if (facing == null || (pd != facing && pd != facing.Opposite)) return;
+
         __state = pd;
         pd = pd.Opposite;
-        Corrected++;
+        ReversedFlowCalls++;
     }
 
-    public static void Postfix(BEBehaviorMPRotor __instance, BlockFacing? __state)
+    public static void Finalizer(BEBehaviorMPRotor __instance, BlockFacing? __state)
     {
-        if (__state == null) return;
-        WheelAxis.PropagationDir(__instance) = __state;
+        if (__state != null) WheelAxis.PropagationDir(__instance) = __state;
     }
 }
 
-/// <summary>Render half: the water wheel double-counts its own direction.
+/// <summary>Patch 3: render the plain shaft angle.
 ///
-/// Every other mechanical block renders <c>s(propagationDir) * networkAngle</c>. That is what keeps
-/// a straight shaft coherent: <c>propagationDir</c> propagates along the run, so every node on it
-/// agrees. The water wheel alone multiplies by <c>dir</c> on top:
+/// Vanilla's wheel getter returns base.AngleRad * dir. The base getter has already computed and
+/// stored the true shaft angle in lastKnownAngleRad by the time this postfix runs, so returning
+/// that field undoes the dir factor exactly, survives dir == 0 (where the vanilla multiply froze
+/// the wheel at angle zero), and degrades to the last known pose when the network is null.
 ///
-/// <code>public override float AngleRad => base.AngleRad * dir;</code>
-///
-/// But <c>propagationDir</c> ALREADY encodes <c>dir</c>. <c>CheckWater</c> sets it to
-/// <c>dir &lt; 0 ? facing.Opposite : facing</c>, so <c>s(propagationDir) = s(facing) * sign(dir)</c>
-/// and the extra factor makes the wheel render <c>s(facing)</c> while the axle bolted through it
-/// renders <c>s(facing) * sign(dir)</c>. Whenever <c>dir</c> is negative the wheel and its own axle
-/// turn opposite ways on screen, in unmodified vanilla.
-///
-/// The first version of this patch negated one wheel of a mirrored pair so the two wheels agreed.
-/// That fixed wheel to wheel and left wheel to axle broken, which is how the double-count was found:
-/// the wheels lined up and the axles through them did not.
-///
-/// Cancelling the factor instead gives the wheel the same render rule as every other block, and all
-/// three consistencies fall out at once. Wheel matches its axle, because both are now
-/// <c>s(propagationDir)</c>. Mirrored wheels match each other, because <c>propagationDir</c> is
-/// already identical for both: a pair in one current gets opposite <c>facing</c> AND opposite
-/// <c>dir</c>, and the two inversions cancel inside <c>dir &lt; 0 ? facing.Opposite : facing</c>.
-/// And the rotation follows the water, because <c>propagationDir</c> tracks <c>dir</c>, which is
-/// derived from the flow.
-///
-/// Note this is a separate root from the torque half. Torque breaks on
-/// <c>OutFacingForNetworkDiscovery</c>, which does differ between mirrored wheels. Render breaks on
-/// the redundant <c>dir</c>. Two defects, two fixes, one symptom.</summary>
+/// With Design D's physics, the shaft angle IS the with-water angle: the wheel and its axle
+/// evaluate the same expression, and the network's signed speed carries the water's direction to
+/// both. No per-wheel render factor exists anymore, which is precisely what makes the rigidity
+/// unconditional.</summary>
 [HarmonyPatch(typeof(BEBehaviorMPWaterWheel), "AngleRad", MethodType.Getter)]
-public static class WaterWheelRenderSensePatch
+public static class WaterWheelRenderPatch
 {
     public static bool Prepare() => IngeniumModSystem.Config.freeFloatingWheels;
 
-    private static readonly AccessTools.FieldRef<BEBehaviorMPWaterWheel, float> Dir =
-        AccessTools.FieldRefAccess<BEBehaviorMPWaterWheel, float>("dir");
-
     public static void Postfix(BEBehaviorMPWaterWheel __instance, ref float __result)
     {
-        float dir = Dir(__instance);
-
-        // Zero means the wheel has never resolved a flow direction. Leave vanilla's value alone
-        // rather than zeroing the angle and freezing the model.
-        if (dir == 0f) return;
-
-        // dir is +1 or -1, so multiplying by it a second time cancels the factor and leaves
-        // base.AngleRad, which is the rule every other mechanical block already follows.
-        __result *= dir;
+        __result = WheelAxis.LastKnownAngleRad(__instance);
     }
 }

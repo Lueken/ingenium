@@ -85,7 +85,9 @@ public static class WaterWheelRapidsPatch
 
         // Vanilla's own inner guard. This is the branch that would have written, so it is the only
         // branch worth counting: ordinary water reaches here constantly and is never converted.
-        if (__result && !liquid!.multiplySpread)
+        // Server side only: CheckWater runs on both sides and an ungated counter double-counts in
+        // singleplayer.
+        if (__result && !liquid!.multiplySpread && api!.Side == EnumAppSide.Server)
         {
             Preserved++;
             if (IngeniumModSystem.Config.debugLogging && loggedInDetail < DetailLimit)

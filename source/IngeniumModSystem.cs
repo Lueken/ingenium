@@ -4,7 +4,7 @@ using Vintagestory.API.Common;
 [assembly: ModInfo("Ingenium", "ingenium",
     Authors = new string[] { "Venah" },
     Description = "Mechanical power, corrected.",
-    Version = "0.2.1")]
+    Version = "0.2.2")]
 
 namespace Ingenium;
 
@@ -51,9 +51,14 @@ public class IngeniumModSystem : ModSystem
         // PatchAll throws and the whole mod fails to load, which is a hostile way to tell a server
         // owner that one fix went stale. Degrade loudly instead: the game keeps its own behaviour
         // and the log says exactly which patch could not attach.
+        //
+        // The HasAnyPatches guard is load-bearing, not hygiene. In singleplayer both sides run in
+        // one process with one Harmony state, and Start runs once per side. Unguarded, every patch
+        // applies twice: the torque prefix swaps the frame twice (flip plus flip, a no-op) and the
+        // render postfix runs twice, silently reverting the fixes while the log reports success.
         try
         {
-            harmony.PatchAll();
+            if (!Harmony.HasAnyPatches(HarmonyId)) harmony.PatchAll();
         }
         catch (System.Exception e)
         {
@@ -82,22 +87,31 @@ public class IngeniumModSystem : ModSystem
                     lastReported = n2;
                 }
 
-                // Nonzero means a mirrored wheel exists and was fighting its neighbours. Reported
-                // once rather than per tick, because this fires on every GetTorque call for every
-                // affected wheel and would otherwise be thousands of lines a minute.
-                long n3 = Patches.WaterWheelTorqueSignPatch.Corrected;
-                if (n3 > 0 && !reportedAxisCorrection)
+                // One-time working signals for the direction fix. Suppressed pd writes fire on
+                // flow CHANGES only (roughly one per wheel per water edit), and reversed-flow
+                // torque calls are normal operation for any wheel whose water opposes its frame.
+                // Each is reported once as proof of life, never per event.
+                long n3 = Patches.WaterWheelPdFreezePatch.Suppressed;
+                if (n3 > 0 && !reportedPdFreeze)
                 {
-                    reportedAxisCorrection = true;
-                    api.Logger.Notification("[Ingenium] axis correction is active: at least one water wheel was built on the "
-                        + "mirrored side variant and was subtracting torque from its network. It now adds.");
+                    reportedPdFreeze = true;
+                    api.Logger.Notification("[Ingenium] pd freeze live: suppressed a water-driven propagationDir rewrite. "
+                        + "Wheels hold their topology frame; the water now speaks through torque alone.");
+                }
+                long n4 = Patches.WaterWheelTorqueSignPatch.ReversedFlowCalls;
+                if (n4 > 0 && !reportedReversedFlow)
+                {
+                    reportedReversedFlow = true;
+                    api.Logger.Notification("[Ingenium] reversed-flow torque active: at least one wheel's water pushes "
+                        + "opposite its topology frame and its torque is being signed by the water. Normal operation.");
                 }
             }, 60000);
         }
     }
 
     private long lastReported;
-    private bool reportedAxisCorrection;
+    private bool reportedPdFreeze;
+    private bool reportedReversedFlow;
 
     public override void Dispose()
     {
@@ -115,10 +129,11 @@ public class IngeniumConfig
     /// See WaterWheelRapidsPatch for what the base game does and why it matters.</summary>
     public bool preserveRapids { get; set; } = true;
 
-    /// <summary>Make a water wheel's spin depend on the water rather than on which mirror variant
-    /// happened to be placed. Wheels on one shaft in one current then add instead of cancelling, and
-    /// they turn the way the water pushes them. Genuinely opposing currents still oppose.
-    /// See WaterWheelAxisPatch.</summary>
+    /// <summary>The free floating gear. The wheel becomes a standard mechanical node: its
+    /// propagationDir is frozen at the topology value, the water's direction enters through the
+    /// torque sign alone, and the render is the plain shaft angle. Wheels turn with their water,
+    /// the shaft follows rigidly, coaxial wheels add for any variant mix, and opposing currents
+    /// still fight. See WaterWheelAxisPatch for the full design and its two failed predecessors.</summary>
     public bool freeFloatingWheels { get; set; } = true;
 
     /// <summary>Verbose logging, on by default. These fixes remove world writes rather than adding
