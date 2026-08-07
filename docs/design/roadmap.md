@@ -95,6 +95,32 @@ can feed, which reinforces the library instinct.
 Also offered by Venah in the exchange: rolling a "big bellows fix" from onions into Ingenium
 eventually, if they want to drop it in.
 
+## The drag term (onions, later the same conversation)
+
+> But also just a passive drag term on parts would do wonders for keeping speed in more realistic
+> bounds. Adding more power gets diminishing returns on speed since part drag is speed squared and
+> stuff. Operating more machines on more torque at a slower speed becomes the superior strategy vs
+> speedmaxxing 1 helvehammer
+
+**Vanilla already has this term.** `MechanicalNetwork.updateNetwork` adds
+`speed^2 x gearedRatio^2 / 1000` per node per pass, verified in source and measured on the bench:
+it is the hard ceiling that pulled a 166x chain from network speed 0.76 to 0.065, the reason no
+source ever reaches its rated speed, and a component of the resistance figure the TCM panel
+prints. Diminishing returns on speed are already vanilla arithmetic; vanilla simply never surfaced
+it or keyed it to anything physical.
+
+Ingenium's version therefore keeps vanilla's shape and replaces the anonymous coefficient with a
+per-part, material-keyed one:
+
+- Wood species drag by hardness (In Dappled Groves mirror)
+- Cast iron drags less, warps instead of burning
+- **Industrial lubricants reduce the drag coefficient.** This is the first concrete API surface
+  the Industrial Story collaboration needs, and it fell directly out of onions' own suggestion.
+
+The economy onions describes (more machines on more torque at lower speed beats speedmaxxing one
+machine) is the same conclusion the pack's ENG work reached independently on 2026-08-05: the
+reward is efficiency, not speed. Two designers converging on one economy from different directions.
+
 ## Standing todo, as publicly committed in that conversation
 
 - Speed limits on machines (helve hammer named specifically)
