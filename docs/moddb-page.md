@@ -29,7 +29,7 @@ and a fix that requires a third-party mod is not one they can take.
 ### What it does not do
 
 Ingenium corrects behaviour that is inconsistent with itself. It does not rebalance anything, it
-does not add content, and it does not gate anything behind player skill. Where the base game is
+does not add content (yet), and it does not gate anything behind player skill. Where the base game is
 merely not to somebody's taste, Ingenium leaves it alone.
 
 Nothing here changes how much power a wheel makes or what any machine costs to run. What changes is

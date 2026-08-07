@@ -11,7 +11,7 @@ third-party mod is not one the developers can take.
 ## Scope
 
 Ingenium corrects behaviour that is **inconsistent with itself**. It does not rebalance, it does not
-add content, and it does not gate anything on player skill. Where the base game is merely not to
+add content (yet), and it does not gate anything on player skill. Where the base game is merely not to
 somebody's taste, Ingenium leaves it alone.
 
 Every patch documents its own evidence in its source file: the decompiled code it corrects, what the
