@@ -121,6 +121,51 @@ The economy onions describes (more machines on more torque at lower speed beats 
 machine) is the same conclusion the pack's ENG work reached independently on 2026-08-05: the
 reward is efficiency, not speed. Two designers converging on one economy from different directions.
 
+## The governor
+
+The machine that answers "constantly fighting to figure out which is on top." Historically the
+regulator is older than steam: Thomas Mead patented the centrifugal governor for windmills in 1787,
+a year before Watt hung one on an engine. Spinning weights fly outward with speed and actuate
+something that sheds power. It exists precisely to arbitrate between varying power and varying load
+without thrashing, which is the exact failure mode vanilla's network exhibits.
+
+**The motivating problem.** Mixed prime movers on one shaft are legal, historically normal, and
+stay that way. Vanilla's droop curves (torque falls linearly toward each source's cap) already
+load-share correctly at steady state: the faster-capped source leads, the slower one drops out
+above its cap and shoulders in as a reserve when load drags speed down. What ruins it in practice
+is regulation, not physics. Vanilla has no inertia and no damping, its fixed-gain integrator hunts
+at large ratio spreads and against steep droop slopes, and every transient (clutch-out, burned
+stage, water reversal) is an unmanaged swing toward whatever ceiling the topology allows.
+
+**The block.** A governor is a network part with a set speed, adjusted in game by interaction,
+never by config file. Behaviour:
+
+- At or below the set speed it contributes nothing but its own small resistance, an ordinary part.
+- Above the set speed it adds resistance that grows progressively with the excess, a droop brake.
+  The shaft cannot run away past its setting no matter what the sources do.
+
+Three jobs fall out of that one rule:
+
+1. **Overspeed protection.** The clutch-out surge, the cascade after a burned stage, and the
+   reversal overshoot all die at the governor's setting. This is the engineering answer to the
+   risk systems: gear down pre-clutch, temper the part, or fit a governor.
+2. **Mixed-source arbitration.** A governed shaft holds a speed both sources can live with;
+   surplus sheds in the governor instead of thrashing the integrator. Wind plus water becomes a
+   managed hybrid rather than a tug of war.
+3. **Damping the solver, hypothesis to bench.** The governor's progressive resistance has exactly
+   the speed-opposing slope vanilla's fixed-gain integrator lacks. A governed network may be
+   stable in the ratio-spread band where an ungoverned one hunts. If the bench confirms it, the
+   governor is not only a machine, it is a workaround for a vanilla defect that ships as gameplay.
+
+**Charter position.** The governor is a new block, which makes it Ingenium's first true content,
+squarely inside the page's "does not add content (yet)". It earns the exception the same way the
+wake does: it restores a real historical capability the simulation is visibly missing, and it
+converts a class of invisible failures into a machine players can build, see, and tune.
+
+Complementary to the drag term: drag is passive and material-keyed, the governor is active and
+player-set. Between them, speed lives in realistic bounds for two different reasons, physics and
+regulation, which is how real mills did it.
+
 ## Standing todo, as publicly committed in that conversation
 
 - Speed limits on machines (helve hammer named specifically)
@@ -129,4 +174,4 @@ reward is efficiency, not speed. Two designers converging on one economy from di
 - Wood-species gears with per-species fire behaviour
 - Metal (cast iron) gears and parts, warp-not-burn failure
 - The risk-point inversion: shear at load engagement, gear down pre-clutch or temper the part
-- Prior items: turbulence wake (design drafted), governor concept for mixed-source regulation
+- Prior items: turbulence wake (design drafted), governor block (design above)
