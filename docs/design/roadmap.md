@@ -24,10 +24,13 @@ Behind it, in order of evidence rather than ambition:
 
 1. **0.3**: material-keyed drag + the material surface v0, published and versioned (see The API
    surface below).
-2. **Flywheel + the governor bench.** Inertia is period-correct, ubiquitous, smaller than the
-   governor, and may solve the transient problem alone. The governor's damping hypothesis gets
-   benched here, as a config-spawned invisible resistance hook on a test network, before any block
-   exists.
+2. **Flywheel + the stabilization bench.** Inertia is period-correct, ubiquitous, smaller than
+   the governor, and may solve the transient problem alone. The bench decides flywheel-versus-
+   governor priority empirically: the two mechanisms differ (flywheel is integrator gain
+   reduction, governor is speed-opposed resistance), so the bench runs each ALONE and BOTH
+   TOGETHER on the same rig, config-spawned invisible hooks, no blocks. Inertia plus regulation is
+   the historically correct pairing, and discovering they interact badly after shipping one would
+   be careless.
 3. **Governor block**, only if the bench confirms the damping effect. If it does, it is Ingenium's
    signature feature and the charter covers it. If not, it is a resistance block with a slider and
    drops far down the list.
@@ -152,6 +155,16 @@ Design rulings (2026-08-07):
 - **Perf shape**: `updateNetwork` runs every 5 server ticks. Resolve each node's material key once
   at network build and cache it; a block-registry lookup per node per pass is how a performance
   mod ships a performance regression.
+- **Coefficient floor (ruled 2026-08-08).** Drag is not only a coefficient, it is the only damping
+  the solver has: the quadratic slope is part of what decides where the fixed-gain integrator
+  hunts, and re-keying it downward for cast iron and lubricant removes stabilization nobody
+  designed but every network has been relying on. Until the flywheel lands, the effective per-node
+  coefficient is FLOORED at vanilla's current effective value, so 0.3 cannot make any existing
+  network less stable than it is today. The floor is temporary by declaration, its exit condition
+  is the flywheel shipping, and both facts go in the 0.3 release notes. Validation for 0.3 benches
+  the hunting band before and after re-keying, and the measured band boundary is recorded HERE as
+  a number (slot: ratio-spread boundary = TBD at the 0.3 bench), so the flywheel work has a target
+  to beat rather than a vibe.
 
 The economy onions describes (more machines on more torque at lower speed beats speedmaxxing one
 machine) is the same conclusion the pack's ENG work reached independently on 2026-08-05: the
@@ -228,12 +241,15 @@ Three jobs fall out of that one rule:
    stable in the ratio-spread band where an ungoverned one hunts. If the bench confirms it, the
    governor is not only a machine, it is a workaround for a vanilla defect that ships as gameplay.
 
-**Bench before block (ruled 2026-08-07).** The damping effect is the main reason this block
-deserves a charter exception, and it is a hypothesis. It gets tested WITHOUT the block: a
-config-spawned invisible resistance hook on a bench network, run across the ratio-spread band
-where the ungoverned network hunts. Overspeed protection and mixed-source arbitration are real but
-ordinary machine features; solving a vanilla solver defect through gameplay is the headline, and
-the headline gets proven before anything gets built. See Release ordering.
+**Bench before block (ruled 2026-08-07, widened 2026-08-08).** The damping effect is the main
+reason this block deserves a charter exception, and it is a hypothesis. It gets tested WITHOUT the
+block, on the same rig as the flywheel's gain-reduction mechanism: each alone, then both together,
+across the ratio-spread band where the ungoverned network hunts. The bench is no longer a
+yes-or-no on the governor; it is the experiment that decides flywheel-versus-governor priority and
+characterises their interaction before either ships. Overspeed protection and mixed-source
+arbitration are real but ordinary machine features; solving a vanilla solver defect through
+gameplay is the headline, and the headline gets proven before anything gets built. See Release
+ordering.
 
 **Charter position.** Covered by the amended charter below without a fresh justification.
 
@@ -295,6 +311,9 @@ answered in Discord forever.
 - The no-steel-gears handbook sentence
 - Prior items: turbulence wake (design drafted, rescheduled behind drag), governor block (design
   above, gated on the bench)
+- Re-run the five-class mechanical diff against 1.22.6 before the 0.3 release notes go out; the
+  test world already runs 1.22.6 while the compatibility claim is verified against 1.22.3 and
+  1.22.5 only, and until the diff passes, release notes state the versions actually verified.
 - **Big bellows migration from thequire**, gated. Status per the evidence file, 2026-08-08: the
   yaw mystery (its Finding 1) is CLOSED on a real model, vanilla's own
   `-HorizontalAngleIndex * 90`, which BellowsFix replaced with a constant wrong on east and west;
