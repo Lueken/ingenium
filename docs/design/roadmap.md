@@ -1,7 +1,8 @@
 # Ingenium roadmap notes
 
 Living document. Updated 2026-08-07 after a design conversation with onions, author of Industrial
-Story, on the VS Discord. Direct quotes are theirs or Venah's from that exchange.
+Story, on the VS Discord, and amended the same day after external review (ordering, API commitment,
+sign convention, charter). Direct quotes are theirs or Venah's from that exchange.
 
 ## Where this sits
 
@@ -10,6 +11,28 @@ Shipped: the water wheel corrections (0.2.2), the proof of concept. Onions, unpr
 > would be good if someone actually fixed vanilla mechanical system. its a mess
 
 That is the market speaking, from the author of the largest industrial mod in the ecosystem.
+
+## Release ordering (ruled 2026-08-07)
+
+**0.3 is the drag term**, not the wake. Re-keying vanilla's existing per-node coefficient is the
+smallest code change with the largest behavioural payoff on this page: no new blocks, no new
+persistent state, no UI, no charter exception, and it delivers onions' economy immediately (more
+machines at more torque beats speedmaxxing one helve hammer). It also forces the
+material-properties surface into existence, which everything downstream needs anyway.
+
+Behind it, in order of evidence rather than ambition:
+
+1. **0.3**: material-keyed drag + the material surface v0, published and versioned (see The API
+   surface below).
+2. **Flywheel + the governor bench.** Inertia is period-correct, ubiquitous, smaller than the
+   governor, and may solve the transient problem alone. The governor's damping hypothesis gets
+   benched here, as a config-spawned invisible resistance hook on a test network, before any block
+   exists.
+3. **Governor block**, only if the bench confirms the damping effect. If it does, it is Ingenium's
+   signature feature and the charter covers it. If not, it is a resistance block with a slider and
+   drops far down the list.
+4. **Turbulence wake**, whenever. Its own honest assessment says mostly flavour plus one degenerate
+   strategy pre-empted; that is real but it outranks nothing above it.
 
 ## The compat doctrine, now externally confirmed
 
@@ -117,9 +140,57 @@ per-part, material-keyed one:
 - **Industrial lubricants reduce the drag coefficient.** This is the first concrete API surface
   the Industrial Story collaboration needs, and it fell directly out of onions' own suggestion.
 
+Design rulings (2026-08-07):
+
+- **The material record is immutable and species-level**: base drag, hardness, ignition
+  temperature, shear limit. The lubricant lives on the PART INSTANCE as a multiplier, and
+  effective drag is computed at network build. If lubrication wrote into the material record, one
+  greased bearing would mutate every part of the species, and the bug reports from a 200 mod
+  server would be unreadable.
+- **Base drag is a first-class field of the record**, not a constant one layer down. The lubricant
+  multiplies it; burying it recreates the exact defect this work exists to fix.
+- **Perf shape**: `updateNetwork` runs every 5 server ticks. Resolve each node's material key once
+  at network build and cache it; a block-registry lookup per node per pass is how a performance
+  mod ships a performance regression.
+
 The economy onions describes (more machines on more torque at lower speed beats speedmaxxing one
 machine) is the same conclusion the pack's ENG work reached independently on 2026-08-05: the
 reward is efficiency, not speed. Two designers converging on one economy from different directions.
+
+## The API surface (commitment, 2026-08-07)
+
+The biggest architectural commitment on this page, promoted from a subordinate clause. Onions has
+publicly said they will build cast iron parts and lubricants on top of this surface. The moment
+they build against it, every refactor breaks the largest industrial mod in the ecosystem, which
+inverts the compat doctrine and points it at Ingenium's own head. So the interface is defined
+now, kept small, versioned, and treated as public from the first release rather than extracted
+later from working code.
+
+**The surface, v0**: the immutable species-level material record (species key, base drag,
+hardness, ignition temperature, shear limit), the per-instance lubricant multiplier, and the
+per-part warp accumulator, one lazily updated float, named in the surface because warp is cast
+iron's entire failure mode and onions is building cast iron parts: leaving it implicit in v0 of a
+public API guarantees a guess. Five record fields, one multiplier, one accumulator. Publishing
+something that small early costs nothing and buys the right to rewrite everything behind it.
+
+**Stability promise, in the 0.3 release notes verbatim**: unstable until 0.4, breaking changes
+announced in the VS Discord thread. Onions decides when to start building against it, rather than
+finding out from a broken mod.
+
+**The sign convention ships as API design, not documentation.** Vanilla's `Network.Speed` is
+signed and stays signed; R18 (Design D, shipped 0.2.2) made negative speed common and legitimate. Documented conventions get
+violated by the next consumer who reaches for the obvious member name, so every new observable
+Ingenium exposes is magnitude-first BY NAME: a consumer reading `Rate` or `Magnitude` gets an
+unsigned value and cannot repeat the bellows failure (two consumers died on this exact reach in
+one night, 2026-08-07, see the bellows observations file). Direction stays available under a name
+that announces itself as directional.
+
+**Regression canaries, scoped honestly.** thequire's `BigBellowsPatch` consumes
+`|Network.Speed| * 50 * GearedRatio` and nothing else, so it is a SPEED-OBSERVABLE regression
+check: any release it breaks has changed speed semantics. It never touches torque, drag,
+materials, or part stress, which is most of this roadmap, so a torque-side equivalent gets built
+separately, or the first refactor breaking torque semantics passes a green canary on the way out
+the door.
 
 ## The governor
 
@@ -157,14 +228,59 @@ Three jobs fall out of that one rule:
    stable in the ratio-spread band where an ungoverned one hunts. If the bench confirms it, the
    governor is not only a machine, it is a workaround for a vanilla defect that ships as gameplay.
 
-**Charter position.** The governor is a new block, which makes it Ingenium's first true content,
-squarely inside the page's "does not add content (yet)". It earns the exception the same way the
-wake does: it restores a real historical capability the simulation is visibly missing, and it
-converts a class of invisible failures into a machine players can build, see, and tune.
+**Bench before block (ruled 2026-08-07).** The damping effect is the main reason this block
+deserves a charter exception, and it is a hypothesis. It gets tested WITHOUT the block: a
+config-spawned invisible resistance hook on a bench network, run across the ratio-spread band
+where the ungoverned network hunts. Overspeed protection and mixed-source arbitration are real but
+ordinary machine features; solving a vanilla solver defect through gameplay is the headline, and
+the headline gets proven before anything gets built. See Release ordering.
+
+**Charter position.** Covered by the amended charter below without a fresh justification.
 
 Complementary to the drag term: drag is passive and material-keyed, the governor is active and
 player-set. Between them, speed lives in realistic bounds for two different reasons, physics and
-regulation, which is how real mills did it.
+regulation, which is how real mills did it. And between them sits the flywheel: mass smooths the
+swing, the regulator holds the setpoint, exactly as it paired historically.
+
+## The charter, amended (2026-08-07)
+
+The old rule, "does not add content (yet)", was already conceding its first exception in the
+parenthetical, and charters die exactly that way, one earned exception at a time. Amended on our
+own terms:
+
+> **Ingenium corrects vanilla mechanical behaviour and adds only the parts required to make the
+> corrected physics playable.**
+
+That covers the governor, the flywheel, bearings, and wood-species gears without a fresh
+justification each time, and it still excludes the content sprawl the rule was written to prevent.
+Propagated 2026-08-08 to all public surfaces: README, ModDB page draft, and the wake doc's charter
+citation.
+
+## Part-stress state cost (ruled 2026-08-07)
+
+Shear at load engagement implies every gear interface knows its transmitted torque and its
+material limit. Both are DERIVED at network update, never stored. Fatigue accumulation, if wanted,
+is one float per part with lazy update, and the imprecision is accepted. A mechanical network on a
+200 mod server with months of uptime has thousands of nodes; per-part accumulators are save bloat
+and a tick budget problem in a mod whose selling point is fixing performance-adjacent defects.
+
+## Two adopted gaps (2026-08-07)
+
+- **Flywheel.** Vanilla has neither inertia nor damping; drag addresses damping and left inertia
+  alone. A flywheel is period-correct, ubiquitous in real mills, smaller than the governor, and
+  solves the transient problem the governor was carrying by itself. Scheduled ahead of the
+  governor block; see Release ordering.
+- **Bearings.** The material ladder rules out wrought iron and steel LARGE parts, correctly, but
+  bearings are the historically right place for hard metal, and they are where lubricant
+  physically lives. Bearings give the Industrial Story lubricant integration a concrete home
+  instead of a coefficient floating on a gear.
+
+## Handbook debt
+
+The no-steel-gears ruling reads as arbitrary gating to a player who has climbed to steel, unless
+the handbook says why: cast iron casts into complex tooth geometry cheaply and performs well in
+compression; wrought iron would need every tooth forged. That sentence goes in game, or it gets
+answered in Discord forever.
 
 ## Standing todo, as publicly committed in that conversation
 
@@ -173,5 +289,19 @@ regulation, which is how real mills did it.
 - Additional gear orientations and transmission options
 - Wood-species gears with per-species fire behaviour
 - Metal (cast iron) gears and parts, warp-not-burn failure
+- Bearings as the hard-metal, lubricant-bearing part (adopted 2026-08-07)
+- Flywheel: network inertia, scheduled ahead of the governor (adopted 2026-08-07)
 - The risk-point inversion: shear at load engagement, gear down pre-clutch or temper the part
-- Prior items: turbulence wake (design drafted), governor block (design above)
+- The no-steel-gears handbook sentence
+- Prior items: turbulence wake (design drafted, rescheduled behind drag), governor block (design
+  above, gated on the bench)
+- **Big bellows migration from thequire**, gated. Status per the evidence file, 2026-08-08: the
+  yaw mystery (its Finding 1) is CLOSED on a real model, vanilla's own
+  `-HorizontalAngleIndex * 90`, which BellowsFix replaced with a constant wrong on east and west;
+  the one-line fix is on the test world awaiting four-facing verification. Two gates remain: the
+  in-line drive check (its Finding 2, the arm's `side` variant does not encode the assumed axis)
+  and the power-entry-side animation dependence (its Finding 3, unexplained, probable shared root
+  with Finding 1; if the yaw verification clears it, the gates drop to Finding 2 alone). Code
+  with an unexplained behaviour at its centre does not migrate into a mod whose pitch is
+  legibility. Evidence:
+  [bellows-observations-2026-08-07.md](bellows-observations-2026-08-07.md)

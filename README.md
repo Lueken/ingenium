@@ -10,9 +10,9 @@ third-party mod is not one the developers can take.
 
 ## Scope
 
-Ingenium corrects behaviour that is **inconsistent with itself**. It does not rebalance, it does not
-add content (yet), and it does not gate anything on player skill. Where the base game is merely not to
-somebody's taste, Ingenium leaves it alone.
+**Ingenium corrects vanilla mechanical behaviour and adds only the parts required to make the
+corrected physics playable.** It does not rebalance, and it does not gate anything on player skill.
+Where the base game is merely not to somebody's taste, Ingenium leaves it alone.
 
 Every patch documents its own evidence in its source file: the decompiled code it corrects, what the
 original does, what breaks without the fix, and how to observe it.

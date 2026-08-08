@@ -1,6 +1,7 @@
 # Design draft: turbulence wake
 
-Target: Ingenium 0.3. Status: DRAFT, not approved for build. Prepared 2026-08-07.
+Target: unscheduled, behind the drag term and the flywheel/governor work (Release ordering ruled
+2026-08-07, see roadmap.md). Status: DRAFT, not approved for build. Prepared 2026-08-07.
 
 ## Thesis
 
@@ -65,11 +66,11 @@ possible fidelity: energy extracted upstream is unavailable downstream. When the
 engineering mod arrives, this rule generalises to real flow attenuation instead of being thrown
 away.
 
-**Charter position.** This is Ingenium's first knowing addition rather than a pure correction, and
-the ModDB page's freshly amended "does not add content (yet)" is the honest cover for it. The
-defensible framing: it restores an intent the base game demonstrably had (the demotion targeted
-the downstream stretch) with the implementation the intent deserved. It ships config-gated with
-its own switch like everything else.
+**Charter position.** Covered by the amended charter (roadmap.md): Ingenium corrects vanilla
+mechanical behaviour and adds only the parts required to make the corrected physics playable. The
+wake qualifies as a correction restored: the base game demonstrably intended downstream energy
+extraction (the demotion targeted the downstream stretch) and implemented it as terrain erosion.
+It ships config-gated with its own switch like everything else.
 
 ## Implementation notes for the build, when approved
 
